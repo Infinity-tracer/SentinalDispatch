@@ -7,10 +7,6 @@ Sentinel Dispatch is a real-time emergency dispatch system that leverages AI/ML 
 
 This system integrates multiple data streams (emergency calls, weather, fire spread) to provide dispatchers with continuously updated risk scores during rapidly evolving wildfire events.
 
-### Project Status
-
-🚧 **In Development** - This is a proof-of-concept implementation focusing on the Lahaina, Maui wildfire event (August 2023).
-
 ## Key Features
 
 - **Real-Time Risk Scoring**: Continuous updates as conditions change
@@ -327,24 +323,3 @@ The following enhancements are planned for future releases:
 - **HIPAA Compliance**: Ensure compliance with healthcare data regulations
 - **Data Privacy**: Enhanced privacy controls and data anonymization
 - **Disaster Recovery**: Comprehensive backup and disaster recovery procedures
-
-## License
-
-This project is provided for **non-commercial use only**. 
-
-**Commercial use is prohibited** without explicit written permission from the project maintainers. This includes, but is not limited to:
-
-- Using this software in any commercial product or service
-- Integrating this software into commercial applications
-- Providing services based on this software for commercial gain
-- Reselling or redistributing this software for commercial purposes
-
-For commercial licensing inquiries, please contact the project maintainers.
-
-**Non-commercial use** includes:
-- Educational and research purposes
-- Personal projects and learning
-- Open source contributions and development
-- Non-profit organizations (subject to approval)
-
-This license restriction is in place to protect the project's development and ensure appropriate use of emergency dispatch technology.
