@@ -1,0 +1,96 @@
+[project]
+name = "sentinel-dispatch"
+version = "0.1.0"
+description = "AI-Powered Climate-Aware Emergency Triage System"
+readme = "README.md"
+requires-python = ">=3.10.0,<3.13.0"
+license = {text = "To be determined"}
+authors = [
+    {name = "Sentinel Dispatch Team"}
+]
+keywords = ["emergency", "dispatch", "wildfire", "ai", "ml", "triage"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # Google AI/ML
+    "google-genai>=0.2.0",
+    "google-cloud-aiplatform>=1.132.0",  # Vertex AI for risk models
+    
+    # Data processing
+    # NumPy 2.0+ and pandas 2.2+ support Python 3.10+
+    "numpy>=2.0.0,<3.0.0",
+    "pandas>=2.2.0,<3.0.0",
+    
+    # API clients
+    "requests>=2.32.0",
+    "aiohttp>=3.10.0",
+    
+    # Geospatial
+    "geopy>=2.4.1",
+    "shapely>=2.0.4",  # Requires GEOS system library
+    
+    # Kafka (for ingestion services and backend API)
+    # Note: confluent-kafka requires librdkafka system library
+    # If issues occur, kafka-python is a pure Python alternative
+    "confluent-kafka>=2.5.0",
+    "kafka-python>=2.0.2",
+    
+    # Backend API (FastAPI)
+    # FastAPI 0.115+ and Pydantic 2.10+ support Python 3.10+
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "websockets>=13.0",
+    "python-multipart>=0.0.12",
+    
+    # Database
+    "sqlalchemy>=2.0.0",
+    "aiosqlite>=0.19.0",  # Async SQLite support
+    
+    # Utilities
+    "python-dotenv>=1.0.1",
+    "pydantic>=2.10.0,<3.0.0",  # Pydantic v2 (v3 not yet released)
+    "structlog>=24.1.0",  # Structured logging
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "black>=24.0.0",
+    "ruff>=0.5.0",
+    "mypy>=1.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "black>=24.0.0",
+    "ruff>=0.5.0",
+    "mypy>=1.8.0",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+

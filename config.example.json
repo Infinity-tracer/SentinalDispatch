@@ -1,0 +1,54 @@
+{
+  "mode": "development",
+  "gemini": {
+    "_comment": "API key is read from GEMINI_API_KEY environment variable"
+  },
+  "kafka": {
+    "bootstrap_servers": "localhost:9092",
+    "auto_create_topics": true
+  },
+  "confluent": {
+    "bootstrap_servers": "your-kafka-bootstrap-servers",
+    "_comment": "API credentials are read from CONFLUENT_API_KEY and CONFLUENT_API_SECRET environment variables"
+  },
+  "google_cloud": {
+    "project_id": "your-project-id",
+    "region": "us-central1"
+  },
+  "apis": {
+    "firms": {
+      "base_url": "https://firms.modaps.eosdis.nasa.gov/api/",
+      "_comment": "MAP_KEY is required for FIRMS area API. Get a free key from https://firms.modaps.eosdis.nasa.gov/api/ and set FIRMS_API_KEY environment variable"
+    },
+    "noaa": {
+      "base_url": "https://api.weather.gov/",
+      "user_agent": "SentinelDispatch/1.0"
+    }
+  },
+  "google_maps": {
+    "_comment": "API key is read from GOOGLE_MAPS_API_KEY environment variable"
+  },
+  "services": {
+    "call_processing": {
+      "enabled": true,
+      "type": "python_service"
+    },
+    "data_enrichment": {
+      "enabled": true,
+      "type": "python_service"
+    },
+    "risk_scoring": {
+      "enabled": true,
+      "type": "python_service"
+    }
+  },
+  "location": {
+    "bounding_box": {
+      "north": 21.225125,
+      "south": 20.499434,
+      "east": -155.973935,
+      "west": -157.311772
+    },
+    "event_date": "2023-08-08"
+  }
+}

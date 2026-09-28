@@ -1,0 +1,211 @@
+x-environment: &default-environment
+  SENTINEL_MODE: development
+  LOG_LEVEL: debug  # Enable debug logging for ML services
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+  FIRMS_API_KEY: ${FIRMS_API_KEY:-}
+  # Vertex AI (optional)
+  GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+  GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+
+services:
+  kafka:
+    image: confluentinc/cp-kafka:8.0.3
+    container_name: sentinel-dispatch-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_METADATA_LOG_BATCH_SIZE_MAX: 10000000
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - sentinel-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+  kafka-init:
+    image: confluentinc/cp-kafka:8.0.3
+    container_name: sentinel-dispatch-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Kafka to be ready..."
+        until kafka-broker-api-versions --bootstrap-server kafka:29092 --command-config /dev/null > /dev/null 2>&1; do
+          echo "Kafka is not ready yet, waiting..."
+          sleep 2
+        done
+        echo "Kafka is ready! Creating topics..."
+        # Local dev: 1 partition is sufficient (can increase to 3+ to test consumer group parallelism)
+        # Replication factor 1 is required for single-broker setup
+        kafka-topics --create --bootstrap-server kafka:29092 --topic emergency-calls --partitions 1 --replication-factor 1 --if-not-exists
+        kafka-topics --create --bootstrap-server kafka:29092 --topic weather-data --partitions 1 --replication-factor 1 --if-not-exists
+        kafka-topics --create --bootstrap-server kafka:29092 --topic fire-data --partitions 1 --replication-factor 1 --if-not-exists
+        kafka-topics --create --bootstrap-server kafka:29092 --topic processed-calls --partitions 1 --replication-factor 1 --if-not-exists
+        kafka-topics --create --bootstrap-server kafka:29092 --topic enriched-calls --partitions 1 --replication-factor 1 --if-not-exists
+        kafka-topics --create --bootstrap-server kafka:29092 --topic risk-scores --partitions 1 --replication-factor 1 --if-not-exists
+        kafka-topics --create --bootstrap-server kafka:29092 --topic alerts --partitions 1 --replication-factor 1 --if-not-exists
+        echo "All topics created successfully!"
+    networks:
+      - sentinel-network
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--list", "--bootstrap-server", "kafka:29092"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: sentinel-dispatch-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    networks:
+      - sentinel-network
+
+  flink-jobmanager:
+    image: confluentinc/cp-flink:2.1.1-cp1-java21
+    container_name: sentinel-dispatch-flink-jobmanager
+    command: jobmanager
+    ports:
+      - "8081:8081"  # REST API
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        jobmanager.rpc.port: 6123
+        jobmanager.bind-host: 0.0.0.0
+        jobmanager.memory.process.size: 1600m
+        taskmanager.memory.process.size: 1728m
+        taskmanager.numberOfTaskSlots: 4
+        parallelism.default: 1
+        rest.port: 8081
+        rest.bind-address: 0.0.0.0
+      # Environment variables for Java Flink agents
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      CLASSIFY_SERVICE_URL: http://ml-api-service:8000/api/classify-call
+      ENRICH_SERVICE_URL: http://ml-api-service:8000/api/enrich-call
+      SCORE_SERVICE_URL: http://ml-api-service:8000/api/score-risk
+      ALERT_SERVICE_URL: http://ml-api-service:8000/api/generate-alert
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      ml-api-service:
+        condition: service_healthy
+    volumes:
+      - ./lib/flink-sql-connector-kafka-4.0.1-2.0.jar:/opt/flink/lib/flink-sql-connector-kafka-4.0.1-2.0.jar
+    networks:
+      - sentinel-network
+
+  flink-taskmanager:
+    image: confluentinc/cp-flink:2.1.1-cp1-java21
+    container_name: sentinel-dispatch-flink-taskmanager
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        jobmanager.rpc.port: 6123
+        taskmanager.bind-host: 0.0.0.0
+        taskmanager.memory.process.size: 1728m
+        taskmanager.numberOfTaskSlots: 4
+        parallelism.default: 1
+      # Environment variables for Java Flink agents (available to TaskManagers)
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      CLASSIFY_SERVICE_URL: http://ml-api-service:8000/api/classify-call
+      ENRICH_SERVICE_URL: http://ml-api-service:8000/api/enrich-call
+      SCORE_SERVICE_URL: http://ml-api-service:8000/api/score-risk
+      ALERT_SERVICE_URL: http://ml-api-service:8000/api/generate-alert
+    depends_on:
+      flink-jobmanager:
+        condition: service_started
+      ml-api-service:
+        condition: service_healthy
+    volumes:
+      - ./lib/flink-sql-connector-kafka-4.0.1-2.0.jar:/opt/flink/lib/flink-sql-connector-kafka-4.0.1-2.0.jar
+    networks:
+      - sentinel-network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "TaskManager"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  ml-api-service:
+    build:
+      context: .
+      dockerfile: docker/fastapi.Dockerfile
+    container_name: sentinel-dispatch-ml-api-service
+    ports:
+      - "8000:8000"
+    environment:
+        <<: *default-environment
+        # Database path inside container (will be persisted via volume)
+        DATABASE_URL: sqlite:///./data/sentinel_dispatch.db
+        # Kafka bootstrap servers - use service name for Docker networking
+        KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      # Mount config directory if it exists
+      - ./config:/app/config:ro
+      # Persist SQLite database across container restarts
+      - ml-api-db-data:/app/data
+    networks:
+      - sentinel-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  kafka-data:
+    # Note: If you encounter metadata version errors, delete this volume:
+    # docker-compose -f docker-compose.dev.yml down -v
+  ml-api-db-data:
+    # SQLite database persistence for ml-api-service
+    # To reset the database, delete this volume:
+    # docker-compose -f docker-compose.dev.yml volume rm ml-api-db-data
+
+networks:
+  sentinel-network:
+    driver: bridge
+
